@@ -3,8 +3,9 @@ const controler = require("../controlers/auth");
 
 const router = new Router();
 
-router.post('/api/user/registration', controler.register);
-router.post('/api/user/login', controler.login);
-router.get('/api/user/getUsers', controler.getUsers)
+router.post("/user/registration", controler.register);
+router.post("/user/login", controler.login);
+router.post("/user/logout", controler.logout);
+router.get("/user/refresh", controler.refresh);
 
-module.exports = router
+module.exports = router;
