@@ -1,43 +1,61 @@
 const bcrypt = require("bcrypt");
-const User = require("../models/userModel");
+const UserModel = require("../models/userModel");
 const TokenService = require("./tokenService");
-const UserDto = require("../dtos/dtoUser");
-
+const ApiError = require("../utils/error");
 class UserService {
-  async registration(email, password) {
-    const candidate = await User.findOne({ email });
-    if (candidate) {
-      throw new Error("Цей користувач вже існує.");
+  async registration(email, password, name) {
+    const uniqueEmail = await UserModel.findOne({ email });
+    const uniqueName = await UserModel.findOne({ name });
+    if (uniqueEmail || uniqueName) {
+      throw new ApiError(400, "Користувач з такими даними вже існує.");
     }
-    const hashPassword = await bcrypt.hash(password, 5);
-    const user = await User.create({ email, password: hashPassword });
 
-    const userDto = new UserDto(user);
-    const tokens = TokenService.generateTokens({ ...userDto });
-    await TokenService.saveToken(userDto.id, tokens.refreshToken);
+    const hashPassword = await bcrypt.hash(password, 5);
+    const user = await UserModel.create({
+      email,
+      password: hashPassword,
+      name,
+    });
+
+    const payload = {
+      id: user._id,
+      email: user.email,
+      name: user.name,
+    };
+
+    const tokens = TokenService.generateTokens({ ...payload });
+
+    await TokenService.saveToken(user._id, tokens.refreshToken);
 
     return {
       ...tokens,
-      user: userDto,
+      user,
     };
   }
 
   async login(email, password) {
-    const user = await User.findOne({ email });
+    const user = await UserModel.findOne({ email });
     if (!user) {
-      throw new Error("Користувача не знайдено.");
+      throw new ApiError(400, "Користувача з такими email не знайдено.");
     }
+
     const isPassEquals = await bcrypt.compare(password, user.password);
     if (!isPassEquals) {
-      throw new Error("Невірний пароль.");
+      throw new ApiError(400, "Невірний пароль.");
     }
-    const userDto = new UserDto(user);
-    const tokens = TokenService.generateTokens({ ...userDto });
-    await TokenService.saveToken(userDto.id, tokens.refreshToken);
+
+    const payload = {
+      id: user._id,
+      email: user.email,
+      name: user.name,
+    };
+
+    const tokens = TokenService.generateTokens({ ...payload });
+    await TokenService.saveToken(user._id, tokens.refreshToken);
 
     return {
       ...tokens,
-      user: userDto,
+      user,
     };
   }
 
@@ -48,21 +66,28 @@ class UserService {
 
   async refresh(refreshToken) {
     if (!refreshToken) {
-      throw new Error("Користувач не авторизований.");
+      throw new ApiError(401, "Користувач не авторизований.");
     }
     const userData = TokenService.validateRefreshToken(refreshToken);
     const tokenFromDB = await TokenService.findToken(refreshToken);
-    if (!userData || tokenFromDB) {
-      throw new Error("Користувач не авторизований.");
+    
+    if (!userData || !tokenFromDB) {
+      throw new ApiError(401, "Користувач не авторизований.");
     }
-    const user = await User.findById(userData.id);
-    const userDto = new UserDto(user);
-    const tokens = TokenService.generateTokens({ ...userDto });
-    await TokenService.saveToken(userDto.id, tokens.refreshToken);
+    const user = await UserModel.findById(userData.id);
+
+    const payload = {
+      id: user._id,
+      email: user.email,
+      name: user.name,
+    };
+
+    const tokens = TokenService.generateTokens({ ...payload });
+    await TokenService.saveToken(user._id, tokens.refreshToken);
 
     return {
       ...tokens,
-      user: userDto,
+      user,
     };
   }
 }
